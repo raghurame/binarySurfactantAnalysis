@@ -78,6 +78,42 @@ typedef struct datafile_impropers
 	int id, improperType, atom1, atom2, atom3, atom4;
 } DATA_IMPROPERS;
 
+typedef struct simulationBoundary
+{
+	float xlo, xhi, ylo, yhi, zlo, zhi;
+	float xLength, yLength, zLength;
+} SIMULATION_BOUNDARY;
+
+typedef struct rdf
+{
+	float rlo, rhi, gofr;
+} RDF;
+
+SIMULATION_BOUNDARY readDumpBoundary (FILE *file_dump, SIMULATION_BOUNDARY boundary)
+{
+	rewind (file_dump);
+	char lineString[2000];
+
+	for (int i = 0; i < 5; ++i)
+	{
+		fgets (lineString, 2000, file_dump);
+	}
+
+	fgets (lineString, 2000, file_dump);
+	sscanf (lineString, "%f %f\n", &boundary.xlo, &boundary.xhi);
+	fgets (lineString, 2000, file_dump);
+	sscanf (lineString, "%f %f\n", &boundary.ylo, &boundary.yhi);
+	fgets (lineString, 2000, file_dump);
+	sscanf (lineString, "%f %f\n", &boundary.zlo, &boundary.zhi);
+	rewind (file_dump);
+
+	boundary.xLength = boundary.xhi - boundary.xlo;
+	boundary.yLength = boundary.yhi - boundary.ylo;
+	boundary.zLength = boundary.zhi - boundary.zlo;
+
+	return boundary;
+}
+
 DATAFILE_INFO readData (const char *dataFileName, DATA_ATOMS **atoms, DATA_BONDS **bonds, DATA_ANGLES **angles, DATA_DIHEDRALS **dihedrals, DATA_IMPROPERS **impropers)
 {
 	printf("Reading LAMMPS data file...\n");
@@ -537,15 +573,51 @@ VECTOR *computeD1Vectors (VECTOR *d1, int d1Count, TRAJECTORY *atoms, int nAtoms
 			d1[currentVector].y1 = atoms[dataBonds[i].atom1 - 1].y;
 			d1[currentVector].z1 = atoms[dataBonds[i].atom1 - 1].z;
 
-			d1[currentVector].x2 = atoms[dataBonds[i].atom4 - 1].x;
-			d1[currentVector].y2 = atoms[dataBonds[i].atom4 - 1].y;
-			d1[currentVector].z2 = atoms[dataBonds[i].atom4 - 1].z;
+			d1[currentVector].x2 = atoms[dataBonds[i].atom2 - 1].x;
+			d1[currentVector].y2 = atoms[dataBonds[i].atom2 - 1].y;
+			d1[currentVector].z2 = atoms[dataBonds[i].atom2 - 1].z;
 
 			currentVector++;
 		}
 	}
 
 	return d1;
+}
+
+VECTOR *computeVectorCenter (VECTOR *dVector, int dVectorCount, SIMULATION_BOUNDARY boundary)
+{
+	for (int i = 0; i < dVectorCount; ++i)
+	{		
+		if (fabs (dVector[i].x1 - dVector[i].x2) > (boundary.xLength / 2))
+		{
+			if (dVector[i].x1 > dVector[i].x2) {
+				dVector[i].x2 += boundary.xLength; }
+			else {
+				dVector[i].x2 -= boundary.xLength; }
+		}
+
+		if (fabs (dVector[i].y1 - dVector[i].y2) > (boundary.yLength / 2))
+		{
+			if (dVector[i].y1 > dVector[i].y2) {
+				dVector[i].y2 += boundary.yLength; }
+			else {
+				dVector[i].y2 -= boundary.yLength; }
+		}
+
+		if (fabs (dVector[i].z1 - dVector[i].z2) > (boundary.zLength / 2))
+		{
+			if (dVector[i].z1 > dVector[i].z2) {
+				dVector[i].z2 += boundary.zLength; }
+			else {
+				dVector[i].z2 -= boundary.zLength; }
+		}
+
+		dVector[i].xc = (dVector[i].x1 + dVector[i].x2) / 2;
+		dVector[i].yc = (dVector[i].y1 + dVector[i].y2) / 2;
+		dVector[i].zc = (dVector[i].z1 + dVector[i].z2) / 2;
+	}
+
+	return dVector;
 }
 
 int main(int argc, char const *argv[])
@@ -561,12 +633,18 @@ int main(int argc, char const *argv[])
 	int dFullCount, d4Count, d1Count;
 	VECTOR *dFull, *d4, *d1;
 
+	RDF *rdf_dFull, *rdf_d4, *rdf_d1;
+	rdf_dFull = 
+
 	DATA_ATOMS *dataAtoms;
 	DATA_BONDS *dataBonds;
 	DATA_ANGLES *dataAngles;
 	DATA_DIHEDRALS *dataDihedrals;
 	DATA_IMPROPERS *dataImpropers;
 	DATAFILE_INFO datafile;
+
+	SIMULATION_BOUNDARY boundary;
+	boundary = readDumpBoundary (file_dump, boundary);
 
 	datafile = readData (argv[2], &dataAtoms, &dataBonds, &dataAngles, &dataDihedrals, &dataImpropers);
 
@@ -590,6 +668,14 @@ int main(int argc, char const *argv[])
 		dFull = computeFullVectors (dFull, dFullCount, atoms, nAtoms);
 		d4 = computeD4Vectors (d4, d4Count, atoms, nAtoms, datafile, dataDihedrals, 1, 5);
 		d1 = computeD1Vectors (d1, d1Count, atoms, nAtoms, datafile, dataBonds, 1, 5);
+
+		dFull = computeVectorCenter (dFull, dFullCount, boundary);
+		d4 = computeVectorCenter (d4, d4Count, boundary);
+		d1 = computeVectorCenter (d1, d1Count, boundary);
+
+		// Calculate RDF by replicating the vectors on all three directions.
+
+		// Use the end of first peak as cut-off distance for calculating angle or order parameter.
 
 		file_status = fgetc (file_dump);
 		currentTimeframe++;
