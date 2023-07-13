@@ -28,6 +28,7 @@ INPUTS:
 #include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
+#include <stdbool.h>
 
 #define PI 3.14159
 #define ORDERPARAMETERBINDISTANCE 3.0
@@ -376,18 +377,27 @@ TRAJECTORY *initializeMolID (TRAJECTORY *atoms, int nAtoms)
 {
 	for (int i = 0; i < nAtoms + 1; ++i)
 	{
+		atoms[i].atomID = 0;
+		atoms[i].atomType = 0;
+		atoms[i].x = 0;
+		atoms[i].y = 0;
+		atoms[i].z = 0;
+		atoms[i].ix = 0;
+		atoms[i].iy = 0;
+		atoms[i].iz = 0;
 		atoms[i].molType = 0;
 	}
 	return atoms;
 }
 
-TRAJECTORY *assignMolID (TRAJECTORY *atoms, int nAtoms)
+TRAJECTORY *assignMolID (TRAJECTORY *atoms, int nAtoms, int *nCTAB, int *nDDAB)
 {
 	int nAtomsInbetween = 0, IDofPreviousBr = 0;
-	int nCTAB = 0, nDDAB = 0, nSurfactants = 0;
+	(*nCTAB) = 0; (*nDDAB) = 0;
+	int nSurfactants = 0;
 
 	for (int i = 0; i < nAtoms; ++i)
-	{
+	{		
 		if (atoms[i].atomType == 5)
 		{
 			nAtomsInbetween = atoms[i].atomID - IDofPreviousBr;
@@ -396,7 +406,7 @@ TRAJECTORY *assignMolID (TRAJECTORY *atoms, int nAtoms)
 
 			if (nAtomsInbetween == 63)
 			{
-				nCTAB++;
+				(*nCTAB)++;
 				atoms[i].molType = 1;
 				for (int j = i; j > (i - 63); --j)
 				{
@@ -406,7 +416,7 @@ TRAJECTORY *assignMolID (TRAJECTORY *atoms, int nAtoms)
 			}
 			else if (nAtomsInbetween == 84)
 			{
-				nDDAB++;
+				(*nDDAB)++;
 				atoms[i].molType = 2;
 				for (int j = i; j > (i - 84); --j)
 				{
@@ -446,7 +456,7 @@ TRAJECTORY *countFullVectors (TRAJECTORY *atoms, int nAtoms, DATAFILE_INFO dataf
 		End tail group for CTAB is 20
 	*/
 
-	int currentAtom = 0, currentMolID = 0, nAtomsInMolecule = 0;
+	int currentAtom = 0, /*currentMolID = 0,*/ nAtomsInMolecule = 0;
 
 	while (currentAtom < nSurfactantAtoms)
 	{
@@ -524,6 +534,16 @@ VECTOR *computeFullVectors (VECTOR *dFull, int dFullCount, TRAJECTORY *atoms, in
 {
 	int currentVector = 0, firstVectorAssigned = 0, secondVectorAssigned = 0;
 
+	for (int i = 0; i < dFullCount; ++i)
+	{
+		dFull[i].x1 = 0;
+		dFull[i].y1 = 0;
+		dFull[i].z1 = 0;
+		dFull[i].x2 = 0;
+		dFull[i].y2 = 0;
+		dFull[i].z2 = 0;
+	}
+
 	for (int i = 0; i < nAtoms; ++i)
 	{
 		if (atoms[i].molType == 1)
@@ -599,6 +619,16 @@ VECTOR *computeD4Vectors (VECTOR *d4, int d4Count, TRAJECTORY *atoms, int nAtoms
 
 	for (int i = 0; i < datafile.nDihedrals; ++i)
 	{
+		d4[i].x1 = 0;
+		d4[i].y1 = 0;
+		d4[i].z1 = 0;
+		d4[i].x2 = 0;
+		d4[i].y2 = 0;
+		d4[i].z2 = 0;
+	}
+
+	for (int i = 0; i < datafile.nDihedrals; ++i)
+	{
 		if (atoms[dataDihedrals[i].atom1 - 1].atomType >= minAtomType && atoms[dataDihedrals[i].atom4 - 1].atomType <= maxAtomType) 
 		{
 			d4[currentVector].x1 = atoms[dataDihedrals[i].atom1 - 1].x;
@@ -641,6 +671,12 @@ VECTOR *computeD1Vectors (VECTOR *d1, int d1Count, TRAJECTORY *atoms, int nAtoms
 
 VECTOR *computeVectorCenter (VECTOR *dVector, int dVectorCount, SIMULATION_BOUNDARY boundary)
 {
+
+	for (int i = 0; i < dVectorCount; ++i)
+	{
+		dVector[i].xc = 0; dVector[i].yc = 0; dVector[i].zc = 0;
+	}
+
 	for (int i = 0; i < dVectorCount; ++i)
 	{
 		if (fabs (dVector[i].x1 - dVector[i].x2) > (boundary.xLength / 2))
@@ -772,7 +808,7 @@ RDF *computeVectorRDF (RDF *rdfData, int rdf_nBins, VECTOR *dVector, int dVector
 	return rdfData;
 }
 
-TRAJECTORY * initializeAtoms (TRAJECTORY *atoms, int nAtoms)
+TRAJECTORY *initializeAtoms (TRAJECTORY *atoms, int nAtoms)
 {
 	for (int i = 0; i < nAtoms; ++i)
 	{
@@ -793,7 +829,7 @@ TRAJECTORY * initializeAtoms (TRAJECTORY *atoms, int nAtoms)
 
 float computeCosTheta (float x1, float y1, float z1, float x2, float y2, float z2, float x3, float y3, float z3, float x4, float y4, float z4)
 {
-	float dotProduct, magnitude1, magnitude2, cosTheta, orderParameter;
+	float dotProduct, magnitude1, magnitude2, cosTheta/*, orderParameter*/;
 
 	dotProduct = (x2 - x1) * (x4 - x3) + (y2 - y1) * (y4 - y3) + (z2 - z1) * (z4 - z3);
 	magnitude1 = sqrt (
@@ -815,8 +851,8 @@ STATS computeNormOrderParameter (STATS orderParameter_norm, VECTOR *dFull, int d
 {
 	orderParameter_norm.average = 0;
 	orderParameter_norm.standardDeviation = 0;
-	float dotProduct, magnitude1, magnitude2, cosTheta;
-	float vectorX = 0, vectorY = 0, vectorZ = 1;
+	float /*dotProduct, magnitude1, magnitude2,*/ cosTheta;
+	// float vectorX = 0, vectorY = 0, vectorZ = 1;
 
 	for (int i = 0; i < dFullCount; ++i)
 	{
@@ -932,6 +968,8 @@ ORDERPARAMETER_BINS *computeOrderParameterVDistance (ORDERPARAMETER_BINS *orderP
 		{
 			if (i != j)
 			{
+				// Make this d[i].x1, d[i].y1, d[i].z1 to d[j].x1, d[j].y1, d[j].z1 and plot with distance
+				// x1, y1, z1 belongs to the head groups
 				distance = computePeriodicDistance (d[i].xc, d[i].yc, d[i].zc, d[j].xc, d[j].yc, d[j].zc, xLength, yLength, zLength);
 				cosTheta = computeCosTheta (d[i].x1, d[i].y1, d[i].z1, d[i].x2, d[i].y2, d[i].z2, d[j].x1, d[j].y1, d[j].z1, d[j].x2, d[j].y2, d[j].z2);
 
@@ -966,14 +1004,97 @@ ORDERPARAMETER_BINS *computeOrderParameterVDistance (ORDERPARAMETER_BINS *orderP
 	return orderParameter_dBins;
 }
 
+ORDERPARAMETER_BINS *computeOrderParameterVDistance2 (ORDERPARAMETER_BINS *orderParameter_dBins, VECTOR *d, int dCount, SIMULATION_BOUNDARY boundary, int nBins_d, int currentTimeframe, FILE *file_dVDistance)
+{
+	float distance, cosTheta;
+	float xLength = (boundary.xhi - boundary.xlo), yLength = (boundary.yhi - boundary.ylo), zLength = (boundary.zhi - boundary.zlo);
+
+	for (int i = 0; i < dCount; ++i)
+	{
+		printf("computing order parameter for vector: %d/%d                     \r", i, dCount);
+		fflush (stdout);
+
+		for (int j = 0; j < dCount; ++j)
+		{
+			if (i != j)
+			{
+				// Make this d[i].x1, d[i].y1, d[i].z1 to d[j].x1, d[j].y1, d[j].z1 and plot with distance
+				// x1, y1, z1 belongs to the head groups
+				distance = computePeriodicDistance (d[i].x1, d[i].y1, d[i].z1, d[j].x2, d[j].y2, d[j].z2, xLength, yLength, zLength);
+				cosTheta = computeCosTheta (d[i].x1, d[i].y1, d[i].z1, d[i].x2, d[i].y2, d[i].z2, d[j].x1, d[j].y1, d[j].z1, d[j].x2, d[j].y2, d[j].z2);
+
+				for (int k = 0; k < nBins_d; ++k)
+				{
+					if (distance < orderParameter_dBins[k].rhi && distance >= orderParameter_dBins[k].rlo) {
+						orderParameter_dBins[k].orderParameter += (cosTheta * cosTheta);
+						orderParameter_dBins[k].count += 1; }
+				}
+			}
+		}
+	}
+
+	// Calculating the average cosTheta and then the order parameter
+
+	fprintf(file_dVDistance, "# %d\n", currentTimeframe);
+
+	for (int i = 0; i < nBins_d; ++i)
+	{
+		orderParameter_dBins[i].orderParameter /= orderParameter_dBins[i].count;
+
+		if (orderParameter_dBins[i].count > 0) {
+			orderParameter_dBins[i].orderParameter = 1.5 * orderParameter_dBins[i].orderParameter - 0.5; }
+		else {
+			orderParameter_dBins[i].orderParameter = -1; }
+
+		fprintf(file_dVDistance, "%f %f %f\n", orderParameter_dBins[i].rlo, orderParameter_dBins[i].rhi, orderParameter_dBins[i].orderParameter);
+	}
+
+	fflush (file_dVDistance);
+
+	return orderParameter_dBins;
+}
+
+VECTOR *computeDDDABVectors (VECTOR *dDDAB, int nDDAB, TRAJECTORY *atoms, int nAtoms)
+{
+	int currentDDAB = 0;
+	bool DDABmolecule;
+	DDABmolecule = false;
+
+	for (int i = 0; i < nAtoms; ++i)
+	{
+		if (atoms[i].molType == 2 && atoms[i].isEndGroup == 1)
+		{
+			if (DDABmolecule)
+			{
+				dDDAB[currentDDAB].x2 = atoms[i].x;
+				dDDAB[currentDDAB].y2 = atoms[i].y;
+				dDDAB[currentDDAB].z2 = atoms[i].z;
+				DDABmolecule = false;
+				currentDDAB++;
+			}
+			else
+			{
+				dDDAB[currentDDAB].x1 = atoms[i].x;
+				dDDAB[currentDDAB].y1 = atoms[i].y;
+				dDDAB[currentDDAB].z1 = atoms[i].z;
+				DDABmolecule = true;
+			}
+		}
+	}
+
+	return dDDAB;
+}
+
 int main(int argc, char const *argv[])
 {
-	FILE *file_dump, *file_data, *file_orderParameterNorm, *file_dFullVDistance, *file_d4VDistance/*, *file_d1VDistance*/;
+	FILE *file_dump, *file_data, *file_orderParameterNorm, *file_dFullVDistance, *file_d4VDistance, *file_dDDABVDistance/*, *file_d1VDistance*/;
 	file_dump = fopen (argv[1], "r");
 	file_data = fopen (argv[2], "r");
 	file_orderParameterNorm = fopen ("orderParameter.normal", "w");
 	file_dFullVDistance = fopen ("dFullVDistance.orderParameter", "w");
+	file_dFullVDistance2 = fopen ("dFullVDistance2.orderParameter", "w");
 	file_d4VDistance = fopen ("d4VDistance.orderParameter", "w");
+	file_dDDABVDistance = fopen ("dDDABVDistance.orderParameter", "w");
 	// file_d1VDistance = fopen ("d1VDistance.orderParameter", "w");
 
 	int file_status, nAtoms, currentTimeframe = 0, nAtomEntries;
@@ -983,7 +1104,8 @@ int main(int argc, char const *argv[])
 	printf("Number of atoms in the trajectory file: %d\n", nAtoms);
 
 	int dFullCount, d4Count, d1Count;
-	VECTOR *dFull, *d4, *d1;
+	int nCTAB, nDDAB;
+	VECTOR *dFull, *d4, *d1, *dDDAB;
 
 	RDF *rdf_dFull, *rdf_d4, *rdf_d1;
 	rdf_dFull = (RDF *) malloc (100 * sizeof (RDF));
@@ -1006,16 +1128,18 @@ int main(int argc, char const *argv[])
 
 	datafile = readData (argv[2], &dataAtoms, &dataBonds, &dataAngles, &dataDihedrals, &dataImpropers);
 
-
 	atoms = initializeAtoms (atoms, nAtoms);
 
 	STATS orderParameter_norm;
 
-	int nBins_dFull, nBins_d4, nBins_d1;
-	ORDERPARAMETER_BINS *orderParameter_dFullBins, *orderParameter_d4Bins, *orderParameter_d1Bins;
+	int nBins_dFull, nBins_d4, nBins_d1, nBins_dDDAB;
+	ORDERPARAMETER_BINS *orderParameter_dFullBins, *orderParameter_d4Bins, *orderParameter_d1Bins, *orderParameter_dDDABBins;
+	ORDERPARAMETER_BINS *orderParameter_dFullBins2;
 	orderParameter_dFullBins = assignOrderParameterBins (orderParameter_dFullBins, boundary, ORDERPARAMETERBINDISTANCE, &nBins_dFull);
+	orderParameter_dFullBins2 = assignOrderParameterBins (orderParameter_dFullBins2, boundary, ORDERPARAMETERBINDISTANCE, &nBins_dFull);
 	orderParameter_d4Bins = assignOrderParameterBins (orderParameter_d4Bins, boundary, ORDERPARAMETERBINDISTANCE, &nBins_d4);
 	orderParameter_d1Bins = assignOrderParameterBins (orderParameter_d1Bins, boundary, ORDERPARAMETERBINDISTANCE, &nBins_d1);
+	orderParameter_dDDABBins = assignOrderParameterBins (orderParameter_dDDABBins, boundary, ORDERPARAMETERBINDISTANCE, &nBins_dDDAB);
 
 	rewind (file_dump);
 	file_status = 1;
@@ -1025,34 +1149,38 @@ int main(int argc, char const *argv[])
 		fprintf(stdout, "computing timestep: %d...                                                            \n", currentTimeframe);
 		fflush (stdout);
 
-		atoms = readTimestep (file_dump, atoms, nAtoms, nAtomEntries, &boundary);
 		atoms = initializeMolID (atoms, nAtoms);
-		atoms = assignMolID (atoms, nAtoms);
+		atoms = readTimestep (file_dump, atoms, nAtoms, nAtomEntries, &boundary);		
+		atoms = assignMolID (atoms, nAtoms, &nCTAB, &nDDAB);
 		atoms = countFullVectors (atoms, nAtoms, datafile, 1, 5, &dFullCount); // 1 and 5 are the atom type extremes for surfactants
 
 		if (currentTimeframe == 0)
 		{
 			countD4Vectors (atoms, datafile, dataDihedrals, 1, 5, &d4Count);
 			countD1Vectors (atoms, datafile, dataBonds, 1, 5, &d1Count);
-
+			
 			// printf("Assigning %d mem for dFull array...\n", dFullCount);
 			dFull = (VECTOR *) malloc (dFullCount * sizeof (VECTOR));
 			d4 = (VECTOR *) malloc (d4Count * sizeof (VECTOR));
+			dDDAB = (VECTOR *) malloc (nDDAB * sizeof (VECTOR));
 			// d1 = (VECTOR *) malloc (d1Count * sizeof (VECTOR));
 		}
 
 		dFull = computeFullVectors (dFull, dFullCount, atoms, nAtoms);
 		d4 = computeD4Vectors (d4, d4Count, atoms, nAtoms, datafile, dataDihedrals, 1, 5);
 		// d1 = computeD1Vectors (d1, d1Count, atoms, nAtoms, datafile, dataBonds, 1, 5);
+		dDDAB = computeDDDABVectors (dDDAB, nDDAB, atoms, nAtoms);
 
 		dFull = computeVectorCenter (dFull, dFullCount, boundary);
 		d4 = computeVectorCenter (d4, d4Count, boundary);
 		// d1 = computeVectorCenter (d1, d1Count, boundary);
+		dDDAB = computeVectorCenter (dDDAB, nDDAB, boundary);
 
 		// MIC correction on vectors
 		dFull = micCorrectionVectors (dFull, dFullCount, boundary);
 		d4 = micCorrectionVectors (d4, d4Count, boundary);
 		// d1 = micCorrectionVectors (d1, d1Count, boundary);
+		dDDAB = micCorrectionVectors (dDDAB, nDDAB, boundary);
 
 		// Calculate RDF by replicating the vectors on all three directions.
 		// rdf_dFull = computeVectorRDF (rdf_dFull, 100, dFull, dFullCount, boundary, 300);
@@ -1064,7 +1192,10 @@ int main(int argc, char const *argv[])
 		// Calculating order parameter as a function of radial distance
 		orderParameter_dFullBins = computeOrderParameterVDistance (orderParameter_dFullBins, dFull, dFullCount, boundary, nBins_dFull, currentTimeframe, file_dFullVDistance);
 		orderParameter_d4Bins = computeOrderParameterVDistance (orderParameter_d4Bins, d4, d4Count, boundary, nBins_d4, currentTimeframe, file_d4VDistance);
+		orderParameter_dDDABBins = computeOrderParameterVDistance (orderParameter_dDDABBins, dDDAB, nDDAB, boundary, nBins_dDDAB, currentTimeframe, file_dDDABVDistance);
 		// orderParameter_d1Bins = computeOrderParameterVDistance (orderParameter_d1Bins, d1, d1Count, boundary, nBins_d1, file_d1VDistance, currentTimeframe);
+
+		orderParameter_dFullBins2 = computeOrderParameterVDistance2 (orderParameter_dFullBins2, dFull, dFullCount, boundary, nBins_dFull, currentTimeframe, file_dFullVDistance2);
 
 		// Calculating average order parameter
 
@@ -1077,6 +1208,7 @@ int main(int argc, char const *argv[])
 	fclose (file_orderParameterNorm);
 	fclose (file_dFullVDistance);
 	fclose (file_d4VDistance);
+	fclose (file_dDDABVDistance);
 
 	return 0;
 }
