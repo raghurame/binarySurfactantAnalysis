@@ -29,6 +29,7 @@ INPUTS:
 #include <unistd.h>
 #include <time.h>
 #include <stdbool.h>
+#include <float.h>
 
 #define PI 3.14159
 #define ORDERPARAMETERBINDISTANCE 3.0
@@ -100,7 +101,7 @@ typedef struct stats
 
 typedef struct orderParameterBins
 {
-	float orderParameter, rlo, rhi, count;
+	long double orderParameter, rlo, rhi, count;
 } ORDERPARAMETER_BINS;
 
 SIMULATION_BOUNDARY readDumpBoundary (FILE *file_dump, SIMULATION_BOUNDARY boundary)
@@ -903,17 +904,17 @@ float computePeriodicDistance (float x1, float y1, float z1, float x2, float y2,
 	return distance;
 }
 
-VECTOR *micCorrectionVectors (VECTOR *dFull, int dFullCount, SIMULATION_BOUNDARY boundary)
+VECTOR *micCorrectionVectors (VECTOR *d, int dCount, SIMULATION_BOUNDARY boundary)
 {
 	float xLength = (boundary.xhi - boundary.xlo), yLength = (boundary.yhi - boundary.ylo), zLength = (boundary.zhi - boundary.zlo);
 	// float previousCoords, translatedCoords;
 
-	for (int i = 0; i < dFullCount; ++i)
+	for (int i = 0; i < dCount; ++i)
 	{
 		// previousCoords = dFull[i].x2;
-		dFull[i].x2 = translatePeriodic (dFull[i].x1, dFull[i].x2, xLength);
-		dFull[i].y2 = translatePeriodic (dFull[i].y1, dFull[i].y2, yLength);
-		dFull[i].z2 = translatePeriodic (dFull[i].z1, dFull[i].z2, zLength);
+		d[i].x2 = translatePeriodic (d[i].x1, d[i].x2, xLength);
+		d[i].y2 = translatePeriodic (d[i].y1, d[i].y2, yLength);
+		d[i].z2 = translatePeriodic (d[i].z1, d[i].z2, zLength);
 		// translatedCoords = dFull[i].x2;
 		// if (previousCoords != translatedCoords)
 		// {
@@ -922,7 +923,7 @@ VECTOR *micCorrectionVectors (VECTOR *dFull, int dFullCount, SIMULATION_BOUNDARY
 		// }
 	}
 
-	return dFull;
+	return d;
 }
 
 ORDERPARAMETER_BINS *assignOrderParameterBins (ORDERPARAMETER_BINS *orderParameter_dBins, SIMULATION_BOUNDARY boundary, float orderParameterBinDistance, int *nBins)
@@ -954,15 +955,30 @@ ORDERPARAMETER_BINS *assignOrderParameterBins (ORDERPARAMETER_BINS *orderParamet
 	return orderParameter_dBins;
 }
 
-ORDERPARAMETER_BINS *computeOrderParameterVDistance (ORDERPARAMETER_BINS *orderParameter_dBins, VECTOR *d, int dCount, SIMULATION_BOUNDARY boundary, int nBins_d, int currentTimeframe, FILE *file_dVDistance)
+ORDERPARAMETER_BINS *resetOrderParameterBins (ORDERPARAMETER_BINS *orderParameter, int nBins)
+{
+	for (int i = 0; i < nBins; ++i)
+	{
+		orderParameter[i].orderParameter = 0;
+		orderParameter[i].count = 0;
+	}
+
+	return orderParameter;
+}
+
+ORDERPARAMETER_BINS *computeOrderParameterVDistance (ORDERPARAMETER_BINS *orderParameter_dBins, ORDERPARAMETER_BINS *orderParameter_dBins_local, VECTOR *d, int dCount, SIMULATION_BOUNDARY boundary, int nBins_d, int currentTimeframe, FILE *file_dVDistance)
 {
 	float distance, cosTheta;
 	float xLength = (boundary.xhi - boundary.xlo), yLength = (boundary.yhi - boundary.ylo), zLength = (boundary.zhi - boundary.zlo);
 
 	for (int i = 0; i < dCount; ++i)
 	{
-		printf("computing order parameter for vector: %d/%d                     \r", i, dCount);
-		fflush (stdout);
+		if ((i%100) == 0)
+		{
+			printf("computing order parameter for vector: %d/%d                     \r", i, dCount);
+			fflush (stdout);
+		}
+
 
 		for (int j = 0; j < dCount; ++j)
 		{
@@ -975,9 +991,9 @@ ORDERPARAMETER_BINS *computeOrderParameterVDistance (ORDERPARAMETER_BINS *orderP
 
 				for (int k = 0; k < nBins_d; ++k)
 				{
-					if (distance < orderParameter_dBins[k].rhi && distance >= orderParameter_dBins[k].rlo) {
-						orderParameter_dBins[k].orderParameter += (cosTheta * cosTheta);
-						orderParameter_dBins[k].count += 1; }
+					if (distance < (float)orderParameter_dBins_local[k].rhi && distance >= (float)orderParameter_dBins_local[k].rlo) {
+						orderParameter_dBins_local[k].orderParameter += ((long double)cosTheta * (long double)cosTheta);
+						orderParameter_dBins_local[k].count += (long double)1; }
 				}
 			}
 		}
@@ -989,30 +1005,34 @@ ORDERPARAMETER_BINS *computeOrderParameterVDistance (ORDERPARAMETER_BINS *orderP
 
 	for (int i = 0; i < nBins_d; ++i)
 	{
-		orderParameter_dBins[i].orderParameter /= orderParameter_dBins[i].count;
+		orderParameter_dBins[i].orderParameter = (orderParameter_dBins_local[i].orderParameter / orderParameter_dBins_local[i].count);
 
-		if (orderParameter_dBins[i].count > 0) {
-			orderParameter_dBins[i].orderParameter = 1.5 * orderParameter_dBins[i].orderParameter - 0.5; }
-		else {
+		if (orderParameter_dBins[i].orderParameter != orderParameter_dBins[i].orderParameter) {
 			orderParameter_dBins[i].orderParameter = -1; }
+		else {
+			orderParameter_dBins[i].orderParameter = 1.5 * orderParameter_dBins[i].orderParameter - 0.5; }
 
-		fprintf(file_dVDistance, "%f %f %f\n", orderParameter_dBins[i].rlo, orderParameter_dBins[i].rhi, orderParameter_dBins[i].orderParameter);
+		fprintf(file_dVDistance, "%LF %LF %LF\n", orderParameter_dBins[i].rlo, orderParameter_dBins[i].rhi, orderParameter_dBins[i].orderParameter);
 	}
 
 	fflush (file_dVDistance);
 
-	return orderParameter_dBins;
+	return orderParameter_dBins_local;
 }
 
-ORDERPARAMETER_BINS *computeOrderParameterVDistance2 (ORDERPARAMETER_BINS *orderParameter_dBins, VECTOR *d, int dCount, SIMULATION_BOUNDARY boundary, int nBins_d, int currentTimeframe, FILE *file_dVDistance)
+ORDERPARAMETER_BINS *computeOrderParameterVDistance2 (ORDERPARAMETER_BINS *orderParameter_dBins, ORDERPARAMETER_BINS *orderParameter_dBins_local, VECTOR *d, int dCount, SIMULATION_BOUNDARY boundary, int nBins_d, int currentTimeframe, FILE *file_dVDistance)
 {
 	float distance, cosTheta;
 	float xLength = (boundary.xhi - boundary.xlo), yLength = (boundary.yhi - boundary.ylo), zLength = (boundary.zhi - boundary.zlo);
 
 	for (int i = 0; i < dCount; ++i)
 	{
-		printf("computing order parameter for vector: %d/%d                     \r", i, dCount);
-		fflush (stdout);
+		if ((i%100) == 0)
+		{
+			printf("computing order parameter for vector: %d/%d                     \r", i, dCount);
+			fflush (stdout);
+		}
+
 
 		for (int j = 0; j < dCount; ++j)
 		{
@@ -1020,14 +1040,14 @@ ORDERPARAMETER_BINS *computeOrderParameterVDistance2 (ORDERPARAMETER_BINS *order
 			{
 				// Make this d[i].x1, d[i].y1, d[i].z1 to d[j].x1, d[j].y1, d[j].z1 and plot with distance
 				// x1, y1, z1 belongs to the head groups
-				distance = computePeriodicDistance (d[i].x1, d[i].y1, d[i].z1, d[j].x2, d[j].y2, d[j].z2, xLength, yLength, zLength);
+				distance = computePeriodicDistance (d[i].x1, d[i].y1, d[i].z1, d[j].x1, d[j].y1, d[j].z1, xLength, yLength, zLength);
 				cosTheta = computeCosTheta (d[i].x1, d[i].y1, d[i].z1, d[i].x2, d[i].y2, d[i].z2, d[j].x1, d[j].y1, d[j].z1, d[j].x2, d[j].y2, d[j].z2);
 
 				for (int k = 0; k < nBins_d; ++k)
 				{
-					if (distance < orderParameter_dBins[k].rhi && distance >= orderParameter_dBins[k].rlo) {
-						orderParameter_dBins[k].orderParameter += (cosTheta * cosTheta);
-						orderParameter_dBins[k].count += 1; }
+					if (distance < (float)orderParameter_dBins_local[k].rhi && distance >= (float)orderParameter_dBins_local[k].rlo) {
+						orderParameter_dBins_local[k].orderParameter += ((long double)cosTheta * (long double)cosTheta);
+						orderParameter_dBins_local[k].count += (long double)1; }
 				}
 			}
 		}
@@ -1039,19 +1059,19 @@ ORDERPARAMETER_BINS *computeOrderParameterVDistance2 (ORDERPARAMETER_BINS *order
 
 	for (int i = 0; i < nBins_d; ++i)
 	{
-		orderParameter_dBins[i].orderParameter /= orderParameter_dBins[i].count;
+		orderParameter_dBins[i].orderParameter = (orderParameter_dBins_local[i].orderParameter / orderParameter_dBins_local[i].count);
 
-		if (orderParameter_dBins[i].count > 0) {
-			orderParameter_dBins[i].orderParameter = 1.5 * orderParameter_dBins[i].orderParameter - 0.5; }
-		else {
+		if (orderParameter_dBins[i].orderParameter != orderParameter_dBins[i].orderParameter) {
 			orderParameter_dBins[i].orderParameter = -1; }
+		else {
+			orderParameter_dBins[i].orderParameter = 1.5 * orderParameter_dBins[i].orderParameter - 0.5; }
 
-		fprintf(file_dVDistance, "%f %f %f\n", orderParameter_dBins[i].rlo, orderParameter_dBins[i].rhi, orderParameter_dBins[i].orderParameter);
+		fprintf(file_dVDistance, "%LF %LF %LF\n", orderParameter_dBins[i].rlo, orderParameter_dBins[i].rhi, orderParameter_dBins[i].orderParameter);
 	}
 
 	fflush (file_dVDistance);
 
-	return orderParameter_dBins;
+	return orderParameter_dBins_local;
 }
 
 VECTOR *computeDDDABVectors (VECTOR *dDDAB, int nDDAB, TRAJECTORY *atoms, int nAtoms)
@@ -1087,7 +1107,7 @@ VECTOR *computeDDDABVectors (VECTOR *dDDAB, int nDDAB, TRAJECTORY *atoms, int nA
 
 int main(int argc, char const *argv[])
 {
-	FILE *file_dump, *file_data, *file_orderParameterNorm, *file_dFullVDistance, *file_d4VDistance, *file_dDDABVDistance/*, *file_d1VDistance*/;
+	FILE *file_dump, *file_data, *file_orderParameterNorm, *file_dFullVDistance, *file_dFullVDistance2, *file_d4VDistance, *file_dDDABVDistance/*, *file_d1VDistance*/;
 	file_dump = fopen (argv[1], "r");
 	file_data = fopen (argv[2], "r");
 	file_orderParameterNorm = fopen ("orderParameter.normal", "w");
@@ -1133,13 +1153,32 @@ int main(int argc, char const *argv[])
 	STATS orderParameter_norm;
 
 	int nBins_dFull, nBins_d4, nBins_d1, nBins_dDDAB;
-	ORDERPARAMETER_BINS *orderParameter_dFullBins, *orderParameter_d4Bins, *orderParameter_d1Bins, *orderParameter_dDDABBins;
-	ORDERPARAMETER_BINS *orderParameter_dFullBins2;
+
+	ORDERPARAMETER_BINS *orderParameter_dFullBins, *orderParameter_dFullBins2;
 	orderParameter_dFullBins = assignOrderParameterBins (orderParameter_dFullBins, boundary, ORDERPARAMETERBINDISTANCE, &nBins_dFull);
 	orderParameter_dFullBins2 = assignOrderParameterBins (orderParameter_dFullBins2, boundary, ORDERPARAMETERBINDISTANCE, &nBins_dFull);
+
+	ORDERPARAMETER_BINS *orderParameter_d4Bins;
 	orderParameter_d4Bins = assignOrderParameterBins (orderParameter_d4Bins, boundary, ORDERPARAMETERBINDISTANCE, &nBins_d4);
+
+	ORDERPARAMETER_BINS *orderParameter_d1Bins;
 	orderParameter_d1Bins = assignOrderParameterBins (orderParameter_d1Bins, boundary, ORDERPARAMETERBINDISTANCE, &nBins_d1);
+
+	ORDERPARAMETER_BINS *orderParameter_dDDABBins;
 	orderParameter_dDDABBins = assignOrderParameterBins (orderParameter_dDDABBins, boundary, ORDERPARAMETERBINDISTANCE, &nBins_dDDAB);
+
+	ORDERPARAMETER_BINS *orderParameter_dFullBins_local, *orderParameter_dFullBins2_local;
+	orderParameter_dFullBins_local = assignOrderParameterBins (orderParameter_dFullBins_local, boundary, ORDERPARAMETERBINDISTANCE, &nBins_dFull);
+	orderParameter_dFullBins2_local = assignOrderParameterBins (orderParameter_dFullBins2_local, boundary, ORDERPARAMETERBINDISTANCE, &nBins_dFull);
+
+	ORDERPARAMETER_BINS *orderParameter_d4Bins_local;
+	orderParameter_d4Bins_local = assignOrderParameterBins (orderParameter_d4Bins_local, boundary, ORDERPARAMETERBINDISTANCE, &nBins_d4);
+
+	ORDERPARAMETER_BINS *orderParameter_d1Bins_local;
+	orderParameter_d1Bins_local = assignOrderParameterBins (orderParameter_d1Bins_local, boundary, ORDERPARAMETERBINDISTANCE, &nBins_d1);
+
+	ORDERPARAMETER_BINS *orderParameter_dDDABBins_local;
+	orderParameter_dDDABBins_local = assignOrderParameterBins (orderParameter_dDDABBins_local, boundary, ORDERPARAMETERBINDISTANCE, &nBins_dDDAB);
 
 	rewind (file_dump);
 	file_status = 1;
@@ -1154,6 +1193,15 @@ int main(int argc, char const *argv[])
 		atoms = assignMolID (atoms, nAtoms, &nCTAB, &nDDAB);
 		atoms = countFullVectors (atoms, nAtoms, datafile, 1, 5, &dFullCount); // 1 and 5 are the atom type extremes for surfactants
 
+		// Re-assigning the local order parameter bins every timestep
+/*		orderParameter_dFullBins_local = resetOrderParameterBins (orderParameter_dFullBins_local, nBins_dFull);
+		orderParameter_dFullBins2_local = resetOrderParameterBins (orderParameter_dFullBins2_local, nBins_dFull);
+
+		orderParameter_d4Bins_local = resetOrderParameterBins (orderParameter_d4Bins_local, nBins_d4);
+		orderParameter_d1Bins_local = resetOrderParameterBins (orderParameter_d1Bins_local, nBins_d1);
+
+		orderParameter_dDDABBins_local = resetOrderParameterBins (orderParameter_dDDABBins_local, nBins_dDDAB);
+*/
 		if (currentTimeframe == 0)
 		{
 			countD4Vectors (atoms, datafile, dataDihedrals, 1, 5, &d4Count);
@@ -1190,12 +1238,12 @@ int main(int argc, char const *argv[])
 		orderParameter_norm = computeNormOrderParameter (orderParameter_norm, dFull, dFullCount, currentTimeframe, file_orderParameterNorm);
 
 		// Calculating order parameter as a function of radial distance
-		orderParameter_dFullBins = computeOrderParameterVDistance (orderParameter_dFullBins, dFull, dFullCount, boundary, nBins_dFull, currentTimeframe, file_dFullVDistance);
-		orderParameter_d4Bins = computeOrderParameterVDistance (orderParameter_d4Bins, d4, d4Count, boundary, nBins_d4, currentTimeframe, file_d4VDistance);
-		orderParameter_dDDABBins = computeOrderParameterVDistance (orderParameter_dDDABBins, dDDAB, nDDAB, boundary, nBins_dDDAB, currentTimeframe, file_dDDABVDistance);
+		orderParameter_dFullBins_local = computeOrderParameterVDistance (orderParameter_dFullBins, orderParameter_dFullBins_local, dFull, dFullCount, boundary, nBins_dFull, currentTimeframe, file_dFullVDistance);
+		orderParameter_d4Bins_local = computeOrderParameterVDistance (orderParameter_d4Bins, orderParameter_d4Bins_local, d4, d4Count, boundary, nBins_d4, currentTimeframe, file_d4VDistance);
+		orderParameter_dDDABBins_local = computeOrderParameterVDistance (orderParameter_dDDABBins, orderParameter_dDDABBins_local, dDDAB, nDDAB, boundary, nBins_dDDAB, currentTimeframe, file_dDDABVDistance);
 		// orderParameter_d1Bins = computeOrderParameterVDistance (orderParameter_d1Bins, d1, d1Count, boundary, nBins_d1, file_d1VDistance, currentTimeframe);
 
-		orderParameter_dFullBins2 = computeOrderParameterVDistance2 (orderParameter_dFullBins2, dFull, dFullCount, boundary, nBins_dFull, currentTimeframe, file_dFullVDistance2);
+		orderParameter_dFullBins2_local = computeOrderParameterVDistance2 (orderParameter_dFullBins2, orderParameter_dFullBins2_local, dFull, dFullCount, boundary, nBins_dFull, currentTimeframe, file_dFullVDistance2);
 
 		// Calculating average order parameter
 
