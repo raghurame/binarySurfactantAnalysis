@@ -32,7 +32,7 @@ INPUTS:
 #include <float.h>
 
 #define PI 3.14159
-#define ORDERPARAMETERBINDISTANCE 3.0
+#define ORDERPARAMETERBINDISTANCE 1.0
 
 typedef struct trajectory
 {
@@ -992,7 +992,7 @@ ORDERPARAMETER_BINS *computeOrderParameterVDistance (ORDERPARAMETER_BINS *orderP
 				for (int k = 0; k < nBins_d; ++k)
 				{
 					if (distance < (float)orderParameter_dBins_local[k].rhi && distance >= (float)orderParameter_dBins_local[k].rlo) {
-						orderParameter_dBins_local[k].orderParameter += ((long double)cosTheta * (long double)cosTheta);
+						orderParameter_dBins_local[k].orderParameter += 1.5 * ((long double)cosTheta * (long double)cosTheta) - 0.5;
 						orderParameter_dBins_local[k].count += (long double)1; }
 				}
 			}
@@ -1007,11 +1007,11 @@ ORDERPARAMETER_BINS *computeOrderParameterVDistance (ORDERPARAMETER_BINS *orderP
 	{
 		orderParameter_dBins[i].orderParameter = (orderParameter_dBins_local[i].orderParameter / orderParameter_dBins_local[i].count);
 
-		if (orderParameter_dBins[i].orderParameter != orderParameter_dBins[i].orderParameter) {
+/*		if (orderParameter_dBins[i].orderParameter != orderParameter_dBins[i].orderParameter) {
 			orderParameter_dBins[i].orderParameter = -1; }
 		else {
 			orderParameter_dBins[i].orderParameter = 1.5 * orderParameter_dBins[i].orderParameter - 0.5; }
-
+*/
 		fprintf(file_dVDistance, "%LF %LF %LF\n", orderParameter_dBins[i].rlo, orderParameter_dBins[i].rhi, orderParameter_dBins[i].orderParameter);
 	}
 
@@ -1112,15 +1112,11 @@ int main(int argc, char const *argv[])
 	char *pipeString;
 	pipeString = (char *) malloc (1000 * sizeof (char));
 
-	if (strstr (argv[1], ".xz"))
-	{
+	if (strstr (argv[1], ".xz")) {
 		snprintf (pipeString, 1000, "xzcat %s", argv[1]);
-		file_dump = popen (pipeString, "r");
-	}
-	else
-	{
-		file_dump = fopen (argv[1], "r");
-	}
+		file_dump = popen (pipeString, "r"); }
+	else {
+		file_dump = fopen (argv[1], "r"); }
 
 	file_data = fopen (argv[2], "r");
 	file_orderParameterNorm = fopen ("orderParameter.normal", "w");
@@ -1132,6 +1128,15 @@ int main(int argc, char const *argv[])
 
 	int file_status, nAtoms, currentTimeframe = 0, nAtomEntries;
 	nAtoms = countNAtoms (file_dump, &nAtomEntries);
+
+	if (strstr (argv[1], ".xz")) {
+		pclose (file_dump);
+		snprintf (pipeString, 1000, "xzcat %s", argv[1]);
+		file_dump = popen (pipeString, "r"); }
+	else {
+		fclose (file_dump);
+		file_dump = fopen (argv[1], "r"); }
+
 	TRAJECTORY *atoms;
 	atoms = (TRAJECTORY *) malloc (nAtoms * sizeof (TRAJECTORY));
 	printf("Number of atoms in the trajectory file: %d\n", nAtoms);
@@ -1158,6 +1163,14 @@ int main(int argc, char const *argv[])
 
 	SIMULATION_BOUNDARY boundary;
 	boundary = readDumpBoundary (file_dump, boundary);
+
+	if (strstr (argv[1], ".xz")) {
+		pclose (file_dump);
+		snprintf (pipeString, 1000, "xzcat %s", argv[1]);
+		file_dump = popen (pipeString, "r"); }
+	else {
+		fclose (file_dump);
+		file_dump = fopen (argv[1], "r"); }
 
 	datafile = readData (argv[2], &dataAtoms, &dataBonds, &dataAngles, &dataDihedrals, &dataImpropers);
 
@@ -1193,7 +1206,6 @@ int main(int argc, char const *argv[])
 	ORDERPARAMETER_BINS *orderParameter_dDDABBins_local;
 	orderParameter_dDDABBins_local = assignOrderParameterBins (orderParameter_dDDABBins_local, boundary, ORDERPARAMETERBINDISTANCE, &nBins_dDDAB);
 
-	rewind (file_dump);
 	file_status = 1;
 
 	while (file_status != EOF)
