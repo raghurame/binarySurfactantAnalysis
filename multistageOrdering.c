@@ -1108,7 +1108,20 @@ VECTOR *computeDDDABVectors (VECTOR *dDDAB, int nDDAB, TRAJECTORY *atoms, int nA
 int main(int argc, char const *argv[])
 {
 	FILE *file_dump, *file_data, *file_orderParameterNorm, *file_dFullVDistance, *file_dFullVDistance2, *file_d4VDistance, *file_dDDABVDistance/*, *file_d1VDistance*/;
-	file_dump = fopen (argv[1], "r");
+
+	char *pipeString;
+	pipeString = (char *) malloc (1000 * sizeof (char));
+
+	if (strstr (argv[1], ".xz"))
+	{
+		snprintf (pipeString, 1000, "xzcat %s", argv[1]);
+		file_dump = popen (pipeString, "r");
+	}
+	else
+	{
+		file_dump = fopen (argv[1], "r");
+	}
+
 	file_data = fopen (argv[2], "r");
 	file_orderParameterNorm = fopen ("orderParameter.normal", "w");
 	file_dFullVDistance = fopen ("dFullVDistance.orderParameter", "w");
