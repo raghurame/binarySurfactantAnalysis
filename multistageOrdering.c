@@ -1238,12 +1238,23 @@ int main(int argc, char const *argv[])
 		orderParameter_norm = computeNormOrderParameter (orderParameter_norm, dFull, dFullCount, currentTimeframe, file_orderParameterNorm);
 
 		// Calculating order parameter as a function of radial distance
-		orderParameter_dFullBins_local = computeOrderParameterVDistance (orderParameter_dFullBins, orderParameter_dFullBins_local, dFull, dFullCount, boundary, nBins_dFull, currentTimeframe, file_dFullVDistance);
-		orderParameter_d4Bins_local = computeOrderParameterVDistance (orderParameter_d4Bins, orderParameter_d4Bins_local, d4, d4Count, boundary, nBins_d4, currentTimeframe, file_d4VDistance);
-		orderParameter_dDDABBins_local = computeOrderParameterVDistance (orderParameter_dDDABBins, orderParameter_dDDABBins_local, dDDAB, nDDAB, boundary, nBins_dDDAB, currentTimeframe, file_dDDABVDistance);
+		if (currentTimeframe%2 == 0)
+		{
+			orderParameter_dFullBins_local = computeOrderParameterVDistance (orderParameter_dFullBins, orderParameter_dFullBins_local, dFull, dFullCount, boundary, nBins_dFull, currentTimeframe, file_dFullVDistance);
+			orderParameter_dFullBins2_local = computeOrderParameterVDistance2 (orderParameter_dFullBins2, orderParameter_dFullBins2_local, dFull, dFullCount, boundary, nBins_dFull, currentTimeframe, file_dFullVDistance2);
+		}
+
+		if (currentTimeframe%20 == 0)
+		{
+			orderParameter_d4Bins_local = computeOrderParameterVDistance (orderParameter_d4Bins, orderParameter_d4Bins_local, d4, d4Count, boundary, nBins_d4, currentTimeframe, file_d4VDistance);
+		}
+
+		if (currentTimeframe%1 == 0)
+		{
+			orderParameter_dDDABBins_local = computeOrderParameterVDistance (orderParameter_dDDABBins, orderParameter_dDDABBins_local, dDDAB, nDDAB, boundary, nBins_dDDAB, currentTimeframe, file_dDDABVDistance);
+		}
 		// orderParameter_d1Bins = computeOrderParameterVDistance (orderParameter_d1Bins, d1, d1Count, boundary, nBins_d1, file_d1VDistance, currentTimeframe);
 
-		orderParameter_dFullBins2_local = computeOrderParameterVDistance2 (orderParameter_dFullBins2, orderParameter_dFullBins2_local, dFull, dFullCount, boundary, nBins_dFull, currentTimeframe, file_dFullVDistance2);
 
 		// Calculating average order parameter
 
