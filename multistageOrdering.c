@@ -1214,7 +1214,7 @@ int main(int argc, char const *argv[])
 		fflush (stdout);
 
 		atoms = initializeMolID (atoms, nAtoms);
-		atoms = readTimestep (file_dump, atoms, nAtoms, nAtomEntries, &boundary);		
+		atoms = readTimestep (file_dump, atoms, nAtoms, nAtomEntries, &boundary);
 		atoms = assignMolID (atoms, nAtoms, &nCTAB, &nDDAB);
 		atoms = countFullVectors (atoms, nAtoms, datafile, 1, 5, &dFullCount); // 1 and 5 are the atom type extremes for surfactants
 
