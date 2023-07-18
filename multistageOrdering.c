@@ -32,11 +32,11 @@ INPUTS:
 #include <float.h>
 
 #define PI 3.14159
-#define ORDERPARAMETERBINDISTANCE 1.0
+#define ORDERPARAMETERBINDISTANCE 0.5
 
 typedef struct trajectory
 {
-	int atomID, atomType, molType, ix, iy, iz;
+	int atomID, atomType, molType, molID, ix, iy, iz;
 	float x, y, z;
 	int isEndGroup;
 } TRAJECTORY;
