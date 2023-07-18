@@ -549,10 +549,7 @@ int main(int argc, char const *argv[])
 
 	fclose (file_data);
 	fclose (file_dump);
-	fclose (file_orderParameterNorm);
-	fclose (file_dFullVDistance);
-	fclose (file_d4VDistance);
-	fclose (file_dDDABVDistance);
-
+	fclose (file_output);
+	
 	return 0;
 }
