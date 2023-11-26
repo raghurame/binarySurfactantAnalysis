@@ -321,18 +321,33 @@ DATAFILE_INFO readData (const char *dataFileName, DATA_ATOMS **atoms, DATA_BONDS
 	return datafile;
 }
 
-int countNAtoms (FILE *file_dump, int *nAtomEntries)
+int countNAtoms (int *nAtomEntries, const char *inputFileName)
 {
+	char *pipeString;
+	pipeString = (char *) malloc (500 * sizeof (char));
+	FILE *file_dump;
+
+	if (strstr (inputFileName, ".xz")) {
+		snprintf (pipeString, 500, "xzcat %s", inputFileName);
+		file_dump = popen (pipeString, "r"); }
+	else {
+		file_dump = fopen (inputFileName, "r"); }
+
 	int nAtoms, currentAtomID, nAtomsFixed;
 	char lineString[2000];
-	rewind (file_dump);
 
 	for (int i = 0; i < 4; ++i) {
 		fgets (lineString, 2000, file_dump); }
 
 	sscanf (lineString, "%d\n", &nAtoms);
 	(*nAtomEntries) = nAtoms;
-	rewind (file_dump);
+	
+	if (strstr (inputFileName, ".xz")) {
+		pclose (file_dump);
+		file_dump = popen (pipeString, "r"); }
+	else {
+		rewind (file_dump); }
+
 	nAtomsFixed = nAtoms;
 
 	for (int i = 0; i < 9; ++i) {
@@ -346,6 +361,13 @@ int countNAtoms (FILE *file_dump, int *nAtomEntries)
 		if (currentAtomID > nAtoms) {
 			nAtomsFixed = currentAtomID; }
 	}
+
+	printf("Number of atom entries in the dump file: %d\nTotal number of atoms present in the simulation: %d\n\n", nAtoms, nAtomsFixed);
+
+	if (strstr (inputFileName, ".xz")) {
+		pclose (file_dump); }
+	else {
+		fclose (file_dump); }
 
 	return nAtomsFixed;
 }
@@ -428,7 +450,7 @@ TRAJECTORY *assignMolID (TRAJECTORY *atoms, int nAtoms, int *nCTAB, int *nDDAB)
 				for (int j = i; j > (i - 84); --j)
 				{
 					if (atoms[j].molType == 0) {
-						atoms[i].molID = currentMolID;
+						atoms[j].molID = currentMolID;
 						atoms[j].molType = 2; }
 				}
 			}
@@ -461,20 +483,21 @@ TRAJECTORY *initializeAtoms (TRAJECTORY *atoms, int nAtoms)
 
 // 		sscanf (lineString, "%d %d %f %f %f %d %d %d\n", &atoms[currentAtomID - 1].atomID, &atoms[currentAtomID - 1].atomType, &atoms[currentAtomID - 1].x, &atoms[currentAtomID - 1].y, &atoms[currentAtomID - 1].z, &atoms[currentAtomID - 1].ix, &atoms[currentAtomID - 1].iy, &atoms[currentAtomID - 1].iz);
 
-void printTrajectoryWithMolID (TRAJECTORY *atoms, int nAtomEntries, FILE *file_output)
+void printTrajectoryWithMolID (TRAJECTORY *atoms, int nAtomEntries, FILE *file_output, int currentTimeframe, SIMULATION_BOUNDARY boundary)
 {
+	fprintf(file_output, "ITEM: TIMESTEP\n%d\nITEM: NUMBER OF ATOMS\n%d\nITEM: BOX BOUNDS pp pp pp\n%f %f\n%f %f\n%f %f\nITEM: ATOMS atomID atomType, molID molType x y z ix iy iz\n", currentTimeframe + 1, nAtomEntries, boundary.xlo, boundary.xhi, boundary.ylo, boundary.yhi, boundary.zlo, boundary.zhi);
+
 	for (int i = 0; i < nAtomEntries; ++i)
 	{
-		printf("%d %d %d %d %f %f %f %d %d %d\n", atoms[i].atomID, atoms[i].atomType, atoms[i].molID, atoms[i].molType, atoms[i].x, atoms[i].y, atoms[i].z, atoms[i].ix, atoms[i].iy, atoms[i].iz);
-		usleep (100000);
+		fprintf(file_output, "%d %d %d %d %f %f %f %d %d %d\n", atoms[i].atomID, atoms[i].atomType, atoms[i].molID, atoms[i].molType, atoms[i].x, atoms[i].y, atoms[i].z, atoms[i].ix, atoms[i].iy, atoms[i].iz);
 	}
 }
 
 int main(int argc, char const *argv[])
 {
-	if (argc != 4)
+	if (argc != 3)
 	{
-		printf("FATAL ERROR:~~~~~~~~~~~~\n\n {~} argv[0] = program\n {~} argv[1] = input dump file\n {~} argv[2] = input data file\n {~} argv[3] = output dump file\n\n");
+		printf("FATAL ERROR:~~~~~~~~~~~~\n\n {~} argv[0] = program\n {~} argv[1] = input dump file\n {~} argv[2] = input data file\n\n");
 		exit (1);
 	}
 
@@ -489,19 +512,20 @@ int main(int argc, char const *argv[])
 	else {
 		file_dump = fopen (argv[1], "r"); }
 
+	char *outputFilename;
+	outputFilename = (char *) malloc (1000 * sizeof (char));
+	snprintf (outputFilename, 1000, "%s.molid", argv[1]);
 	file_data = fopen (argv[2], "r");
-	file_output = fopen (argv[3], "w");
+	file_output = fopen (outputFilename, "w");
 
 	int file_status, nAtoms, currentTimeframe = 0, nAtomEntries;
-	nAtoms = countNAtoms (file_dump, &nAtomEntries);
+	nAtoms = countNAtoms (&nAtomEntries, argv[1]);
 
 	if (strstr (argv[1], ".xz")) {
 		pclose (file_dump);
-		snprintf (pipeString, 1000, "xzcat %s", argv[1]);
 		file_dump = popen (pipeString, "r"); }
 	else {
-		fclose (file_dump);
-		file_dump = fopen (argv[1], "r"); }
+		rewind (file_dump); }
 
 	TRAJECTORY *atoms;
 	atoms = (TRAJECTORY *) malloc (nAtoms * sizeof (TRAJECTORY));
@@ -521,11 +545,9 @@ int main(int argc, char const *argv[])
 
 	if (strstr (argv[1], ".xz")) {
 		pclose (file_dump);
-		snprintf (pipeString, 1000, "xzcat %s", argv[1]);
 		file_dump = popen (pipeString, "r"); }
 	else {
-		fclose (file_dump);
-		file_dump = fopen (argv[1], "r"); }
+		rewind (file_dump); }
 
 	datafile = readData (argv[2], &dataAtoms, &dataBonds, &dataAngles, &dataDihedrals, &dataImpropers);
 
@@ -541,7 +563,7 @@ int main(int argc, char const *argv[])
 		atoms = initializeMolID (atoms, nAtoms);
 		atoms = readTimestep (file_dump, atoms, nAtoms, nAtomEntries, &boundary);
 		atoms = assignMolID (atoms, nAtoms, &nCTAB, &nDDAB);
-		printTrajectoryWithMolID (atoms, nAtomEntries, file_output);
+		printTrajectoryWithMolID (atoms, nAtoms, file_output, currentTimeframe, boundary);
 
 		file_status = fgetc (file_dump);
 		currentTimeframe++;
@@ -550,6 +572,6 @@ int main(int argc, char const *argv[])
 	fclose (file_data);
 	fclose (file_dump);
 	fclose (file_output);
-	
+
 	return 0;
 }

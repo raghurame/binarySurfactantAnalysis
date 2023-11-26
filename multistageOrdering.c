@@ -321,18 +321,33 @@ DATAFILE_INFO readData (const char *dataFileName, DATA_ATOMS **atoms, DATA_BONDS
 	return datafile;
 }
 
-int countNAtoms (FILE *file_dump, int *nAtomEntries)
+int countNAtoms (int *nAtomEntries, const char *inputFileName)
 {
+	char *pipeString;
+	pipeString = (char *) malloc (500 * sizeof (char));
+	FILE *file_dump;
+
+	if (strstr (inputFileName, ".xz")) {
+		snprintf (pipeString, 500, "xzcat %s", inputFileName);
+		file_dump = popen (pipeString, "r"); }
+	else {
+		file_dump = fopen (inputFileName, "r"); }
+
 	int nAtoms, currentAtomID, nAtomsFixed;
 	char lineString[2000];
-	rewind (file_dump);
 
 	for (int i = 0; i < 4; ++i) {
 		fgets (lineString, 2000, file_dump); }
 
 	sscanf (lineString, "%d\n", &nAtoms);
 	(*nAtomEntries) = nAtoms;
-	rewind (file_dump);
+	
+	if (strstr (inputFileName, ".xz")) {
+		pclose (file_dump);
+		file_dump = popen (pipeString, "r"); }
+	else {
+		rewind (file_dump); }
+
 	nAtomsFixed = nAtoms;
 
 	for (int i = 0; i < 9; ++i) {
@@ -346,6 +361,13 @@ int countNAtoms (FILE *file_dump, int *nAtomEntries)
 		if (currentAtomID > nAtoms) {
 			nAtomsFixed = currentAtomID; }
 	}
+
+	printf("Number of atom entries in the dump file: %d\nTotal number of atoms present in the simulation: %d\n\n", nAtoms, nAtomsFixed);
+
+	if (strstr (inputFileName, ".xz")) {
+		pclose (file_dump); }
+	else {
+		fclose (file_dump); }
 
 	return nAtomsFixed;
 }
@@ -367,7 +389,7 @@ TRAJECTORY *readTimestep (FILE *file_dump, TRAJECTORY *atoms, int nAtoms, int nA
 	{
 		fgets (lineString, 2000, file_dump);
 		sscanf (lineString, "%d\n", &currentAtomID);
-		sscanf (lineString, "%d %d %f %f %f %d %d %d\n", &atoms[currentAtomID - 1].atomID, &atoms[currentAtomID - 1].atomType, &atoms[currentAtomID - 1].x, &atoms[currentAtomID - 1].y, &atoms[currentAtomID - 1].z, &atoms[currentAtomID - 1].ix, &atoms[currentAtomID - 1].iy, &atoms[currentAtomID - 1].iz);
+		sscanf (lineString, "%d %d %d %d %f %f %f %d %d %d\n", &atoms[currentAtomID - 1].atomID, &atoms[currentAtomID - 1].atomType, &atoms[currentAtomID - 1].molID, &atoms[currentAtomID - 1].atomType, &atoms[currentAtomID - 1].x, &atoms[currentAtomID - 1].y, &atoms[currentAtomID - 1].z, &atoms[currentAtomID - 1].ix, &atoms[currentAtomID - 1].iy, &atoms[currentAtomID - 1].iz);
 		atoms[currentAtomID - 1].isEndGroup = 0;
 	}
 
@@ -438,10 +460,8 @@ TRAJECTORY *countFullVectors (TRAJECTORY *atoms, int nAtoms, DATAFILE_INFO dataf
 	int nSurfactantAtoms = 0;
 	(*dFullCount) = 0;
 
-	/*
-		atoms[i].isEndGroup = 1 denotes the tail C atom
-		atoms[i].isEndGroup = 2 denotes the head N atom
-	*/
+	// atoms[i].isEndGroup = 1 denotes the tail C atom
+	// atoms[i].isEndGroup = 2 denotes the head N atom
 
 	for (int i = 0; i < nAtoms; ++i)
 	{
@@ -452,10 +472,8 @@ TRAJECTORY *countFullVectors (TRAJECTORY *atoms, int nAtoms, DATAFILE_INFO dataf
 			nSurfactantAtoms++; }
 	}
 
-	/*
-		End tail groups for DDAB are 1 and 27.
-		End tail group for CTAB is 20
-	*/
+	// End tail groups for DDAB are 1 and 27.
+	// End tail group for CTAB is 20
 
 	int currentAtom = 0, /*currentMolID = 0,*/ nAtomsInMolecule = 0;
 
@@ -463,14 +481,14 @@ TRAJECTORY *countFullVectors (TRAJECTORY *atoms, int nAtoms, DATAFILE_INFO dataf
 	{
 		if (currentAtom == 0)
 		{
-			if (atoms[0].molType == 1)
+			if (atoms[currentAtom].molType == 1)
 			{
 				atoms[currentAtom + 19].isEndGroup = 1;
 				nAtomsInMolecule = 63;
 				currentAtom += nAtomsInMolecule;
 				(*dFullCount) += 1;
 			}
-			if (atoms[0].molType == 2)
+			if (atoms[currentAtom].molType == 2)
 			{
 				atoms[currentAtom].isEndGroup = 1;
 				atoms[currentAtom + 26].isEndGroup = 1;
@@ -816,6 +834,7 @@ TRAJECTORY *initializeAtoms (TRAJECTORY *atoms, int nAtoms)
 		atoms[i].atomID = 0;
 		atoms[i].atomType = 0;
 		atoms[i].molType = 0;
+		atoms[i].molID = 0;
 		atoms[i].ix = 0;
 		atoms[i].iy = 0;
 		atoms[i].iz = 0;
@@ -987,7 +1006,11 @@ ORDERPARAMETER_BINS *computeOrderParameterVDistance (ORDERPARAMETER_BINS *orderP
 				// Make this d[i].x1, d[i].y1, d[i].z1 to d[j].x1, d[j].y1, d[j].z1 and plot with distance
 				// x1, y1, z1 belongs to the head groups
 				distance = computePeriodicDistance (d[i].xc, d[i].yc, d[i].zc, d[j].xc, d[j].yc, d[j].zc, xLength, yLength, zLength);
+				printf("%f %f %f %f %f %f [%f %f %f]\n", d[i].xc, d[i].yc, d[i].zc, d[j].xc, d[j].yc, d[j].zc, xLength, yLength, zLength);
 				cosTheta = computeCosTheta (d[i].x1, d[i].y1, d[i].z1, d[i].x2, d[i].y2, d[i].z2, d[j].x1, d[j].y1, d[j].z1, d[j].x2, d[j].y2, d[j].z2);
+
+				printf("%f %f\n", distance, cosTheta);
+				usleep (100000);
 
 				for (int k = 0; k < nBins_d; ++k)
 				{
@@ -1119,15 +1142,35 @@ int main(int argc, char const *argv[])
 		file_dump = fopen (argv[1], "r"); }
 
 	file_data = fopen (argv[2], "r");
-	file_orderParameterNorm = fopen ("orderParameter.normal", "w");
-	file_dFullVDistance = fopen ("dFullVDistance.orderParameter", "w");
-	file_dFullVDistance2 = fopen ("dFullVDistance2.orderParameter", "w");
-	file_d4VDistance = fopen ("d4VDistance.orderParameter", "w");
-	file_dDDABVDistance = fopen ("dDDABVDistance.orderParameter", "w");
+	char *string_orderParameterNorm, *string_dFullVDistance, *string_dFullVDistance2, *string_d4VDistance, *string_dDDABVDistance;
+	string_orderParameterNorm = (char *) malloc (2000 * sizeof (char));
+	string_dFullVDistance = (char *) malloc (2000 * sizeof (char));
+	string_dFullVDistance2 = (char *) malloc (2000 * sizeof (char));
+	string_d4VDistance = (char *) malloc (2000 * sizeof (char));
+	string_dDDABVDistance = (char *) malloc (2000 * sizeof (char));
+
+	snprintf (string_orderParameterNorm, 2000, "%s.orderParameter.normal", argv[1]);
+	printf("printing %s...\n", string_orderParameterNorm);
+	snprintf (string_dFullVDistance, 2000, "%s.dFullVDistance.orderParameter", argv[1]);
+	printf("printing %s...\n", string_dFullVDistance);
+	snprintf (string_dFullVDistance2, 2000, "%s.dFullVDistance2.orderParameter", argv[1]);
+	printf("printing %s...\n", string_dFullVDistance2);
+	snprintf (string_d4VDistance, 2000, "%s.d4VDistance.orderParameter", argv[1]);
+	printf("printing %s...\n", string_d4VDistance);
+	snprintf (string_dDDABVDistance, 2000, "%s.dDDABVDistance.orderParameter", argv[1]);
+	printf("printing %s...\n", string_dDDABVDistance);
+
+	file_orderParameterNorm = fopen (string_orderParameterNorm, "w");
+	file_dFullVDistance = fopen (string_dFullVDistance, "w");
+	file_dFullVDistance2 = fopen (string_dFullVDistance2, "w");
+	file_d4VDistance = fopen (string_d4VDistance, "w");
+	file_dDDABVDistance = fopen (string_dDDABVDistance, "w");
 	// file_d1VDistance = fopen ("d1VDistance.orderParameter", "w");
 
 	int file_status, nAtoms, currentTimeframe = 0, nAtomEntries;
-	nAtoms = countNAtoms (file_dump, &nAtomEntries);
+	// nAtomEntries = number of atom entries in the dump file
+	// nAtoms = total number of atoms in the simualation (also contains the count of atoms not printed in the dump file)
+	nAtoms = countNAtoms (&nAtomEntries, argv[1]);
 
 	if (strstr (argv[1], ".xz")) {
 		pclose (file_dump);
@@ -1215,18 +1258,18 @@ int main(int argc, char const *argv[])
 
 		atoms = initializeMolID (atoms, nAtoms);
 		atoms = readTimestep (file_dump, atoms, nAtoms, nAtomEntries, &boundary);
-		atoms = assignMolID (atoms, nAtoms, &nCTAB, &nDDAB);
+		// atoms = assignMolID (atoms, nAtoms, &nCTAB, &nDDAB);
 		atoms = countFullVectors (atoms, nAtoms, datafile, 1, 5, &dFullCount); // 1 and 5 are the atom type extremes for surfactants
 
 		// Re-assigning the local order parameter bins every timestep
-/*		orderParameter_dFullBins_local = resetOrderParameterBins (orderParameter_dFullBins_local, nBins_dFull);
-		orderParameter_dFullBins2_local = resetOrderParameterBins (orderParameter_dFullBins2_local, nBins_dFull);
+		// orderParameter_dFullBins_local = resetOrderParameterBins (orderParameter_dFullBins_local, nBins_dFull);
+		// orderParameter_dFullBins2_local = resetOrderParameterBins (orderParameter_dFullBins2_local, nBins_dFull);
 
-		orderParameter_d4Bins_local = resetOrderParameterBins (orderParameter_d4Bins_local, nBins_d4);
-		orderParameter_d1Bins_local = resetOrderParameterBins (orderParameter_d1Bins_local, nBins_d1);
+		// orderParameter_d4Bins_local = resetOrderParameterBins (orderParameter_d4Bins_local, nBins_d4);
+		// orderParameter_d1Bins_local = resetOrderParameterBins (orderParameter_d1Bins_local, nBins_d1);
 
-		orderParameter_dDDABBins_local = resetOrderParameterBins (orderParameter_dDDABBins_local, nBins_dDDAB);
-*/
+		// orderParameter_dDDABBins_local = resetOrderParameterBins (orderParameter_dDDABBins_local, nBins_dDDAB);
+
 		if (currentTimeframe == 0)
 		{
 			countD4Vectors (atoms, datafile, dataDihedrals, 1, 5, &d4Count);
@@ -1279,7 +1322,6 @@ int main(int argc, char const *argv[])
 			orderParameter_dDDABBins_local = computeOrderParameterVDistance (orderParameter_dDDABBins, orderParameter_dDDABBins_local, dDDAB, nDDAB, boundary, nBins_dDDAB, currentTimeframe, file_dDDABVDistance);
 		}
 		// orderParameter_d1Bins = computeOrderParameterVDistance (orderParameter_d1Bins, d1, d1Count, boundary, nBins_d1, file_d1VDistance, currentTimeframe);
-
 
 		// Calculating average order parameter
 
